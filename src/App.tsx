@@ -144,17 +144,17 @@ function App() {
     sortedPieces.forEach((piece) => {
       // Change color based on connection status
       const isConnected = piece.connectedTo.length > 0;
-      ctx.fillStyle = isConnected ? "#22c55e" : "#4f46e5";
+      ctx.fillStyle = isConnected ? "#22c55e" : "#F9A66B";
       ctx.fillRect(piece.x, piece.y, pieceSize, pieceSize);
 
       // Draw border
-      ctx.strokeStyle = isConnected ? "#16a34a" : "#585858";
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = isConnected ? "#16a34a" : "#434343";
+      ctx.lineWidth = 1;
       ctx.strokeRect(piece.x, piece.y, pieceSize, pieceSize);
 
       // Draw piece number
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 36px Arial";
+      ctx.font = "normal 12px Arial";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(
