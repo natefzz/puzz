@@ -101,6 +101,9 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [draggedPieceId, setDraggedPieceId] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [layerOrder, setLayerOrder] = useState<number[]>([
+    1, 2, 3, 4, 5, 6, 7, 8, 9,
+  ]); // Group IDs in draw order
 
   const [pieces, setPieces] = useState<PuzzlePiece[]>(initialPieces);
 
@@ -108,6 +111,7 @@ function App() {
     setPieces(JSON.parse(JSON.stringify(initialPieces)));
     setIsDragging(false);
     setDraggedPieceId(null);
+    setLayerOrder([1, 2, 3, 4, 5, 6, 7, 8, 9]);
   };
 
   const pieceSize = 100;
@@ -129,15 +133,22 @@ function App() {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Sort pieces by layer order
+    const sortedPieces = [...pieces].sort((a, b) => {
+      return layerOrder.indexOf(a.groupId) - layerOrder.indexOf(b.groupId);
+    });
+
+    console.log("sortedPieces", sortedPieces);
+
     // Draw all puzzle pieces
-    pieces.forEach((piece) => {
+    sortedPieces.forEach((piece) => {
       // Change color based on connection status
       const isConnected = piece.connectedTo.length > 0;
       ctx.fillStyle = isConnected ? "#22c55e" : "#4f46e5";
       ctx.fillRect(piece.x, piece.y, pieceSize, pieceSize);
 
       // Draw border
-      ctx.strokeStyle = isConnected ? "#16a34a" : "#312e81";
+      ctx.strokeStyle = isConnected ? "#16a34a" : "#585858";
       ctx.lineWidth = 2;
       ctx.strokeRect(piece.x, piece.y, pieceSize, pieceSize);
 
@@ -151,38 +162,8 @@ function App() {
         piece.x + pieceSize / 2,
         piece.y + pieceSize / 2,
       );
-
-      // If dragging, draw connection indicator
-      if (piece.id === draggedPieceId) {
-        ctx.strokeStyle = "#ef4444";
-        ctx.lineWidth = 3;
-        ctx.setLineDash([5, 5]);
-        ctx.strokeRect(piece.x, piece.y, pieceSize, pieceSize);
-        ctx.setLineDash([]);
-      }
     });
-
-    // Draw connection lines between connected puzzle pieces
-    ctx.strokeStyle = "#16a34a";
-    ctx.lineWidth = 3;
-    pieces.forEach((piece) => {
-      piece.connectedTo.forEach((connectedId) => {
-        const connectedPiece = pieces.find((p) => p.id === connectedId);
-        if (connectedPiece && piece.id < connectedId) {
-          // Avoid duplicate drawing
-          const centerX1 = piece.x + pieceSize / 2;
-          const centerY1 = piece.y + pieceSize / 2;
-          const centerX2 = connectedPiece.x + pieceSize / 2;
-          const centerY2 = connectedPiece.y + pieceSize / 2;
-
-          ctx.beginPath();
-          ctx.moveTo(centerX1, centerY1);
-          ctx.lineTo(centerX2, centerY2);
-          ctx.stroke();
-        }
-      });
-    });
-  }, [pieces, draggedPieceId]);
+  }, [pieces, layerOrder]);
 
   // Check if two puzzle pieces should connect and are close enough
   const checkConnection = (
@@ -292,6 +273,13 @@ function App() {
       if (piece) {
         setIsDragging(true);
         setDraggedPieceId(pieceId);
+
+        // Move this group to the top of layer order
+        setLayerOrder((prevOrder) => {
+          const newOrder = prevOrder.filter((id) => id !== piece.groupId);
+          return [...newOrder, piece.groupId];
+        });
+
         setDragOffset({
           x: mousePos.x - piece.x,
           y: mousePos.y - piece.y,
