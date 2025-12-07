@@ -5,6 +5,15 @@ interface PuzzlePiece {
   id: number;
   x: number;
   y: number;
+  width: number; // Actual width of this piece's image
+  height: number; // Actual height of this piece's image
+  // Edge offsets: positive = tab (protrudes out), negative = blank (indented), 0 = flat edge
+  edgeOffsets: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
   // Connection relationships: which pieces should connect (top, right, bottom, left)
   connections: {
     top: number | null; // ID of piece that should connect above
@@ -18,12 +27,19 @@ interface PuzzlePiece {
   groupId: number;
 }
 
+const TAB_SIZE = 46; // Size of protruding tabs
+const BASE_WIDTH = 237; // Base puzzle piece width (including blank spaces)
+const BASE_HEIGHT = 200; // Base puzzle piece height (including blank spaces)
+
 const initialPieces: PuzzlePiece[] = [
   // First row
   {
     id: 1,
     x: 50,
     y: 50,
+    width: 100,
+    height: 100,
+    edgeOffsets: { top: 0, right: -TAB_SIZE, bottom: -TAB_SIZE, left: 0 }, // [0,1,1,0] - top/left flat, right/bottom blank
     connections: { top: null, right: 2, bottom: 4, left: null },
     connectedTo: [],
     groupId: 1,
@@ -32,6 +48,9 @@ const initialPieces: PuzzlePiece[] = [
     id: 2,
     x: 200,
     y: 50,
+    width: 100,
+    height: 100,
+    edgeOffsets: { top: 0, right: TAB_SIZE, bottom: -TAB_SIZE, left: TAB_SIZE }, // [0,2,1,2] - top flat, right tab, bottom blank, left tab
     connections: { top: null, right: 3, bottom: 5, left: 1 },
     connectedTo: [],
     groupId: 2,
@@ -40,6 +59,9 @@ const initialPieces: PuzzlePiece[] = [
     id: 3,
     x: 350,
     y: 50,
+    width: 100,
+    height: 100,
+    edgeOffsets: { top: 0, right: 0, bottom: -TAB_SIZE, left: -TAB_SIZE }, // [0,0,1,1] - top/right flat, bottom/left blank
     connections: { top: null, right: null, bottom: 6, left: 2 },
     connectedTo: [],
     groupId: 3,
@@ -49,6 +71,14 @@ const initialPieces: PuzzlePiece[] = [
     id: 4,
     x: 50,
     y: 200,
+    width: 100,
+    height: 100,
+    edgeOffsets: {
+      top: TAB_SIZE,
+      right: -TAB_SIZE,
+      bottom: -TAB_SIZE,
+      left: 0,
+    }, // [2,1,1,0] - top tab, right blank, bottom blank, left flat
     connections: { top: 1, right: 5, bottom: 7, left: null },
     connectedTo: [],
     groupId: 4,
@@ -57,6 +87,14 @@ const initialPieces: PuzzlePiece[] = [
     id: 5,
     x: 200,
     y: 200,
+    width: 100,
+    height: 100,
+    edgeOffsets: {
+      top: TAB_SIZE,
+      right: TAB_SIZE,
+      bottom: -TAB_SIZE,
+      left: TAB_SIZE,
+    }, // [2,2,1,2] - top/right/left tabs, bottom blank
     connections: { top: 2, right: 6, bottom: 8, left: 4 },
     connectedTo: [],
     groupId: 5,
@@ -65,6 +103,9 @@ const initialPieces: PuzzlePiece[] = [
     id: 6,
     x: 350,
     y: 200,
+    width: 100,
+    height: 100,
+    edgeOffsets: { top: TAB_SIZE, right: 0, bottom: TAB_SIZE, left: -TAB_SIZE }, // [2,0,2,1] - top/bottom tabs, right flat, left blank
     connections: { top: 3, right: null, bottom: 9, left: 5 },
     connectedTo: [],
     groupId: 6,
@@ -74,6 +115,9 @@ const initialPieces: PuzzlePiece[] = [
     id: 7,
     x: 50,
     y: 350,
+    width: 100,
+    height: 100,
+    edgeOffsets: { top: TAB_SIZE, right: -TAB_SIZE, bottom: 0, left: 0 }, // [2,1,0,0] - top tab, right blank, bottom/left flat
     connections: { top: 4, right: 8, bottom: null, left: null },
     connectedTo: [],
     groupId: 7,
@@ -82,6 +126,9 @@ const initialPieces: PuzzlePiece[] = [
     id: 8,
     x: 200,
     y: 350,
+    width: 100,
+    height: 100,
+    edgeOffsets: { top: TAB_SIZE, right: -TAB_SIZE, bottom: 0, left: TAB_SIZE }, // [2,1,0,2] - top/left tabs, right blank, bottom flat
     connections: { top: 5, right: 9, bottom: null, left: 7 },
     connectedTo: [],
     groupId: 8,
@@ -90,6 +137,9 @@ const initialPieces: PuzzlePiece[] = [
     id: 9,
     x: 350,
     y: 350,
+    width: 100,
+    height: 100,
+    edgeOffsets: { top: -TAB_SIZE, right: 0, bottom: 0, left: TAB_SIZE }, // [1,0,0,2] - left tab, top blank, right/bottom flat
     connections: { top: 6, right: null, bottom: null, left: 8 },
     connectedTo: [],
     groupId: 9,
@@ -106,6 +156,9 @@ function App() {
   ]); // Group IDs in draw order
 
   const [pieces, setPieces] = useState<PuzzlePiece[]>(initialPieces);
+  const [pieceImages, setPieceImages] = useState<{
+    [key: number]: HTMLImageElement;
+  }>({});
 
   const handleReset = () => {
     setPieces(JSON.parse(JSON.stringify(initialPieces)));
@@ -114,13 +167,58 @@ function App() {
     setLayerOrder([1, 2, 3, 4, 5, 6, 7, 8, 9]);
   };
 
-  const pieceSize = 100;
   const snapDistance = 20;
 
   // Get all puzzle pieces in the same group
   const getPiecesInGroup = (groupId: number): PuzzlePiece[] => {
     return pieces.filter((p) => p.groupId === groupId);
   };
+
+  // Load puzzle piece images
+  useEffect(() => {
+    const images: { [key: number]: HTMLImageElement } = {};
+    let loadedCount = 0;
+    const totalImages = 9;
+
+    // Mapping piece IDs to image file names
+    const imageMapping: { [key: number]: string } = {
+      1: "piece_0_0.png",
+      2: "piece_0_1.png",
+      3: "piece_0_2.png",
+      4: "piece_1_0.png",
+      5: "piece_1_1.png",
+      6: "piece_1_2.png",
+      7: "piece_2_0.png",
+      8: "piece_2_1.png",
+      9: "piece_2_2.png",
+    };
+
+    for (let i = 1; i <= 9; i++) {
+      const img = new Image();
+      const pieceId = i;
+      img.onload = () => {
+        loadedCount++;
+
+        // Update the piece with actual image dimensions
+        setPieces((prevPieces) =>
+          prevPieces.map((piece) =>
+            piece.id === pieceId
+              ? { ...piece, width: img.width, height: img.height }
+              : piece,
+          ),
+        );
+
+        if (loadedCount === totalImages) {
+          setPieceImages(images);
+        }
+      };
+      img.onerror = () => {
+        console.error(`Failed to load image for piece ${pieceId}`);
+      };
+      img.src = `/pieces/1/${imageMapping[i]}`;
+      images[i] = img;
+    }
+  }, []);
 
   // Draw canvas
   useEffect(() => {
@@ -142,28 +240,35 @@ function App() {
 
     // Draw all puzzle pieces
     sortedPieces.forEach((piece) => {
-      // Change color based on connection status
-      const isConnected = piece.connectedTo.length > 0;
-      ctx.fillStyle = isConnected ? "#22c55e" : "#F9A66B";
-      ctx.fillRect(piece.x, piece.y, pieceSize, pieceSize);
+      const img = pieceImages[piece.id];
 
-      // Draw border
-      ctx.strokeStyle = isConnected ? "#16a34a" : "#434343";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(piece.x, piece.y, pieceSize, pieceSize);
+      if (img && img.complete) {
+        // Draw the puzzle piece image
+        ctx.drawImage(img, piece.x, piece.y, piece.width, piece.height);
+      } else {
+        // Fallback: draw colored rectangle if image not loaded
+        const isConnected = piece.connectedTo.length > 0;
+        ctx.fillStyle = isConnected ? "#22c55e" : "#F9A66B";
+        ctx.fillRect(piece.x, piece.y, piece.width, piece.height);
 
-      // Draw piece number
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "normal 12px Arial";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(
-        piece.id.toString(),
-        piece.x + pieceSize / 2,
-        piece.y + pieceSize / 2,
-      );
+        // Draw border
+        ctx.strokeStyle = isConnected ? "#16a34a" : "#434343";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(piece.x, piece.y, piece.width, piece.height);
+
+        // Draw piece number
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "normal 12px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+          piece.id.toString(),
+          piece.x + piece.width / 2,
+          piece.y + piece.height / 2,
+        );
+      }
     });
-  }, [pieces, layerOrder]);
+  }, [pieces, layerOrder, pieceImages]);
 
   // Check if two puzzle pieces should connect and are close enough
   const checkConnection = (
@@ -175,36 +280,52 @@ function App() {
 
     // Check right connection
     if (piece1.connections.right === piece2.id) {
+      // Distance depends on piece1's right edge offset
+      // If piece1 has tab (+46): distance = 237 + 46 = 283
+      // If piece1 has blank (-46): distance = 237 - 46 = 191
+      const expectedDx = BASE_WIDTH + piece1.edgeOffsets.right;
+      const expectedDy = piece2.edgeOffsets.top - piece1.edgeOffsets.top;
       if (
-        Math.abs(dy) < snapDistance &&
-        Math.abs(dx - pieceSize) < snapDistance
+        Math.abs(dy - expectedDy) < snapDistance &&
+        Math.abs(dx - expectedDx) < snapDistance
       ) {
         return "right";
       }
     }
     // Check left connection
     if (piece1.connections.left === piece2.id) {
+      const expectedDx = -(BASE_WIDTH + piece2.edgeOffsets.right);
+      const expectedDy = piece2.edgeOffsets.top - piece1.edgeOffsets.top;
       if (
-        Math.abs(dy) < snapDistance &&
-        Math.abs(dx + pieceSize) < snapDistance
+        Math.abs(dy - expectedDy) < snapDistance &&
+        Math.abs(dx - expectedDx) < snapDistance
       ) {
         return "left";
       }
     }
     // Check bottom connection
     if (piece1.connections.bottom === piece2.id) {
+      const expectedDx = piece2.edgeOffsets.left - piece1.edgeOffsets.left;
+      const expectedDy =
+        BASE_HEIGHT + piece1.edgeOffsets.bottom + piece2.edgeOffsets.top;
       if (
-        Math.abs(dx) < snapDistance &&
-        Math.abs(dy - pieceSize) < snapDistance
+        Math.abs(dx - expectedDx) < snapDistance &&
+        Math.abs(dy - expectedDy) < snapDistance
       ) {
         return "bottom";
       }
     }
     // Check top connection
     if (piece1.connections.top === piece2.id) {
+      const expectedDx = piece2.edgeOffsets.left - piece1.edgeOffsets.left;
+      const expectedDy = -(
+        BASE_HEIGHT +
+        piece2.edgeOffsets.bottom +
+        piece1.edgeOffsets.top
+      );
       if (
-        Math.abs(dx) < snapDistance &&
-        Math.abs(dy + pieceSize) < snapDistance
+        Math.abs(dx - expectedDx) < snapDistance &&
+        Math.abs(dy - expectedDy) < snapDistance
       ) {
         return "top";
       }
@@ -221,13 +342,29 @@ function App() {
   ): { x: number; y: number } => {
     switch (direction) {
       case "right":
-        return { x: piece2.x - pieceSize, y: piece2.y };
+        return {
+          x: piece2.x - (BASE_WIDTH + piece1.edgeOffsets.right),
+          y: piece2.y - (piece2.edgeOffsets.top - piece1.edgeOffsets.top),
+        };
       case "left":
-        return { x: piece2.x + pieceSize, y: piece2.y };
+        return {
+          x: piece2.x + (BASE_WIDTH + piece2.edgeOffsets.right),
+          y: piece2.y - (piece2.edgeOffsets.top - piece1.edgeOffsets.top),
+        };
       case "bottom":
-        return { x: piece2.x, y: piece2.y - pieceSize };
+        return {
+          x: piece2.x - (piece2.edgeOffsets.left - piece1.edgeOffsets.left),
+          y:
+            piece2.y -
+            (BASE_HEIGHT + piece1.edgeOffsets.bottom + piece2.edgeOffsets.top),
+        };
       case "top":
-        return { x: piece2.x, y: piece2.y + pieceSize };
+        return {
+          x: piece2.x - (piece2.edgeOffsets.left - piece1.edgeOffsets.left),
+          y:
+            piece2.y +
+            (BASE_HEIGHT + piece2.edgeOffsets.bottom + piece1.edgeOffsets.top),
+        };
       default:
         return { x: piece1.x, y: piece1.y };
     }
@@ -242,9 +379,9 @@ function App() {
       const piece = pieces[i];
       if (
         mouseX >= piece.x &&
-        mouseX <= piece.x + pieceSize &&
+        mouseX <= piece.x + piece.width &&
         mouseY >= piece.y &&
-        mouseY <= piece.y + pieceSize
+        mouseY <= piece.y + piece.height
       ) {
         return piece.id;
       }
@@ -403,8 +540,8 @@ function App() {
       <h1 className="">puzz</h1>
       <canvas
         ref={canvasRef}
-        width={600}
-        height={600}
+        width={800}
+        height={800}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
