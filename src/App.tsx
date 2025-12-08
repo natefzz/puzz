@@ -161,7 +161,22 @@ function App() {
   }>({});
 
   const handleReset = () => {
-    setPieces(JSON.parse(JSON.stringify(initialPieces)));
+    setPieces((prevPieces) => {
+      // Create a map of current dimensions
+      const dimensionsMap = new Map(
+        prevPieces.map((p) => [p.id, { width: p.width, height: p.height }]),
+      );
+
+      // Reset pieces but preserve the loaded image dimensions
+      return initialPieces.map((piece) => {
+        const dims = dimensionsMap.get(piece.id);
+        return {
+          ...piece,
+          width: dims?.width ?? piece.width,
+          height: dims?.height ?? piece.height,
+        };
+      });
+    });
     setIsDragging(false);
     setDraggedPieceId(null);
     setLayerOrder([1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -236,8 +251,6 @@ function App() {
       return layerOrder.indexOf(a.groupId) - layerOrder.indexOf(b.groupId);
     });
 
-    console.log("sortedPieces", sortedPieces);
-
     // Draw all puzzle pieces
     sortedPieces.forEach((piece) => {
       const img = pieceImages[piece.id];
@@ -275,16 +288,24 @@ function App() {
     piece1: PuzzlePiece,
     piece2: PuzzlePiece,
   ): string | null => {
-    const dx = piece2.x - piece1.x;
-    const dy = piece2.y - piece1.y;
+    // Calculate the base positions (without edge offsets)
+    const base1X = piece1.x + Math.max(0, piece1.edgeOffsets.left);
+    const base1Y = piece1.y + Math.max(0, piece1.edgeOffsets.top);
+    const base2X = piece2.x + Math.max(0, piece2.edgeOffsets.left);
+    const base2Y = piece2.y + Math.max(0, piece2.edgeOffsets.top);
+
+    const dx = base2X - base1X;
+    const dy = base2Y - base1Y;
+
+    console.log("piece2.id", piece2.id);
+    console.log("base2X", base2X, "base1X", base1X);
+    console.log("dx", dx);
 
     // Check right connection
     if (piece1.connections.right === piece2.id) {
-      // Distance depends on piece1's right edge offset
-      // If piece1 has tab (+46): distance = 237 + 46 = 283
-      // If piece1 has blank (-46): distance = 237 - 46 = 191
-      const expectedDx = BASE_WIDTH + piece1.edgeOffsets.right;
-      const expectedDy = piece2.edgeOffsets.top - piece1.edgeOffsets.top;
+      const expectedDx = BASE_WIDTH;
+      const expectedDy = 0;
+      console.log("expectedDx", expectedDx);
       if (
         Math.abs(dy - expectedDy) < snapDistance &&
         Math.abs(dx - expectedDx) < snapDistance
@@ -294,8 +315,8 @@ function App() {
     }
     // Check left connection
     if (piece1.connections.left === piece2.id) {
-      const expectedDx = -(BASE_WIDTH + piece2.edgeOffsets.right);
-      const expectedDy = piece2.edgeOffsets.top - piece1.edgeOffsets.top;
+      const expectedDx = -BASE_WIDTH;
+      const expectedDy = 0;
       if (
         Math.abs(dy - expectedDy) < snapDistance &&
         Math.abs(dx - expectedDx) < snapDistance
@@ -305,9 +326,8 @@ function App() {
     }
     // Check bottom connection
     if (piece1.connections.bottom === piece2.id) {
-      const expectedDx = piece2.edgeOffsets.left - piece1.edgeOffsets.left;
-      const expectedDy =
-        BASE_HEIGHT + piece1.edgeOffsets.bottom + piece2.edgeOffsets.top;
+      const expectedDx = 0;
+      const expectedDy = BASE_HEIGHT;
       if (
         Math.abs(dx - expectedDx) < snapDistance &&
         Math.abs(dy - expectedDy) < snapDistance
@@ -317,12 +337,8 @@ function App() {
     }
     // Check top connection
     if (piece1.connections.top === piece2.id) {
-      const expectedDx = piece2.edgeOffsets.left - piece1.edgeOffsets.left;
-      const expectedDy = -(
-        BASE_HEIGHT +
-        piece2.edgeOffsets.bottom +
-        piece1.edgeOffsets.top
-      );
+      const expectedDx = 0;
+      const expectedDy = -BASE_HEIGHT;
       if (
         Math.abs(dx - expectedDx) < snapDistance &&
         Math.abs(dy - expectedDy) < snapDistance
@@ -340,34 +356,38 @@ function App() {
     piece2: PuzzlePiece,
     direction: string,
   ): { x: number; y: number } => {
+    // Calculate base positions (accounting for edge offsets)
+    const base2X = piece2.x + Math.max(0, piece2.edgeOffsets.left);
+    const base2Y = piece2.y + Math.max(0, piece2.edgeOffsets.top);
+
+    let targetBase1X: number, targetBase1Y: number;
+
     switch (direction) {
       case "right":
-        return {
-          x: piece2.x - (BASE_WIDTH + piece1.edgeOffsets.right),
-          y: piece2.y - (piece2.edgeOffsets.top - piece1.edgeOffsets.top),
-        };
+        targetBase1X = base2X - BASE_WIDTH;
+        targetBase1Y = base2Y;
+        break;
       case "left":
-        return {
-          x: piece2.x + (BASE_WIDTH + piece2.edgeOffsets.right),
-          y: piece2.y - (piece2.edgeOffsets.top - piece1.edgeOffsets.top),
-        };
+        targetBase1X = base2X + BASE_WIDTH;
+        targetBase1Y = base2Y;
+        break;
       case "bottom":
-        return {
-          x: piece2.x - (piece2.edgeOffsets.left - piece1.edgeOffsets.left),
-          y:
-            piece2.y -
-            (BASE_HEIGHT + piece1.edgeOffsets.bottom + piece2.edgeOffsets.top),
-        };
+        targetBase1X = base2X;
+        targetBase1Y = base2Y - BASE_HEIGHT;
+        break;
       case "top":
-        return {
-          x: piece2.x - (piece2.edgeOffsets.left - piece1.edgeOffsets.left),
-          y:
-            piece2.y +
-            (BASE_HEIGHT + piece2.edgeOffsets.bottom + piece1.edgeOffsets.top),
-        };
+        targetBase1X = base2X;
+        targetBase1Y = base2Y + BASE_HEIGHT;
+        break;
       default:
         return { x: piece1.x, y: piece1.y };
     }
+
+    // Convert back from base position to actual position
+    return {
+      x: targetBase1X - Math.max(0, piece1.edgeOffsets.left),
+      y: targetBase1Y - Math.max(0, piece1.edgeOffsets.top),
+    };
   };
 
   // Check if mouse is inside a puzzle piece
@@ -471,6 +491,8 @@ function App() {
                 !piece1.connectedTo.includes(piece2.id)
               ) {
                 const direction = checkConnection(piece1, piece2);
+
+                console.log("direction", direction);
 
                 if (direction) {
                   // Calculate snap position
